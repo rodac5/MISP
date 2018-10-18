@@ -10,7 +10,7 @@ class SysLogLogableBehavior extends LogableBehavior {
 		}
 		if (isset($this->settings[$Model->alias]['skip']['add']) && $this->settings[$Model->alias]['skip']['add'] && $created) {
 			return true;
-		} elseif (isset($this->settings[$Model->alias]['skip']['edit']) && $this->settings[$Model->alias]['skip']['edit'] && !$created) {
+		} else if (isset($this->settings[$Model->alias]['skip']['edit']) && $this->settings[$Model->alias]['skip']['edit'] && !$created) {
 			return true;
 		}
 		$keys = array_keys($Model->data[$Model->alias]);
@@ -20,7 +20,7 @@ class SysLogLogableBehavior extends LogableBehavior {
 		}
 		if ($Model->id) {
 			$id = $Model->id;
-		} elseif ($Model->insertId) {
+		} else if ($Model->insertId) {
 			$id = $Model->insertId;
 		}
 		if (isset($this->schema[$this->settings[$Model->alias]['foreignKey']])) {
@@ -37,9 +37,9 @@ class SysLogLogableBehavior extends LogableBehavior {
 			}
 
 			if ($created) {
-				$logData['Log']['description'] .= __('added', TRUE);
+				$logData['Log']['description'] .= __('added', true);
 			} else {
-				$logData['Log']['description'] .= __('updated', TRUE);
+				$logData['Log']['description'] .= __('updated', true);
 			}
 		}
 		if (isset($this->schema['action'])) {
@@ -47,6 +47,14 @@ class SysLogLogableBehavior extends LogableBehavior {
 				$logData['Log']['action'] = 'add';
 			} else {
 				$logData['Log']['action'] = 'edit';
+				if ($Model->alias === 'Attribute' && isset($Model->data[$Model->alias]['deleted']) && $Model->data[$Model->alias]['deleted']) {
+					$logData['Log']['action'] = 'delete';
+					unset($this->schema['change']);
+				}
+				if ($Model->alias === 'Attribute' && isset($Model->data[$Model->alias]['deleted']) && !$Model->data[$Model->alias]['deleted'] && $this->old[$Model->alias]['deleted']) {
+					$logData['Log']['action'] = 'undelete';
+					unset($this->schema['change']);
+				}
 			}
 
 		}
@@ -57,6 +65,9 @@ class SysLogLogableBehavior extends LogableBehavior {
 			foreach ( $Model->data[$Model->alias] as $key => $value ) {
 				if (isset($Model->data[$Model->alias][$Model->primaryKey]) && !empty($this->old) && isset($this->old[$Model->alias][$key])) {
 					$old = $this->old[$Model->alias][$key];
+					if (is_array($old)) {
+						$old = json_encode($old, true);
+					}
 				} else {
 					$old = '';
 				}
@@ -95,9 +106,9 @@ class SysLogLogableBehavior extends LogableBehavior {
 	function _saveLog(&$Model, $logData, $title = null) {
 		if ($title !== NULL) {
 			$logData['Log']['title'] = $title;
-		} elseif ($Model->displayField == $Model->primaryKey) {
+		} else if ($Model->displayField == $Model->primaryKey) {
 			$logData['Log']['title'] = $Model->alias . ' (' . $Model->id . ')';
-		} elseif (isset($Model->data[$Model->alias][$Model->displayField])) {
+		} else if (isset($Model->data[$Model->alias][$Model->displayField])) {
 			if (($Model->alias == "User") && ($logData['Log']['action'] != 'edit')) {
 				$logData['Log']['title'] = 'User (' . $Model->data[$Model->alias][$Model->primaryKey] . '): ' . $Model->data[$Model->alias][$Model->displayField];
 			} else {
@@ -115,13 +126,13 @@ class SysLogLogableBehavior extends LogableBehavior {
 		if (isset($this->schema[$this->settings[$Model->alias]['foreignKey']]) && !isset($logData['Log'][$this->settings[$Model->alias]['foreignKey']])) {
 			if ($Model->id) {
 				$logData['Log'][$this->settings[$Model->alias]['foreignKey']] = $Model->id;
-			} elseif ($Model->insertId) {
+			} else if ($Model->insertId) {
 				$logData['Log'][$this->settings[$Model->alias]['foreignKey']] = $Model->insertId;
 			}
 		}
 		if (!isset($this->schema['action'])) {
 			unset($logData['Log']['action']);
-		} elseif (isset($Model->logableAction) && !empty($Model->logableAction)) {
+		} else if (isset($Model->logableAction) && !empty($Model->logableAction)) {
 			$logData['Log']['action'] = implode(',', $Model->logableAction); // . ' ' . $logData['Log']['action'];
 			unset($Model->logableAction);
 		}
@@ -130,7 +141,7 @@ class SysLogLogableBehavior extends LogableBehavior {
 			$logData['Log']['version_id'] = $Model->version_id;
 			unset($Model->version_id);
 		}
-		
+
 		if (isset($this->schema[$this->settings[$Model->alias]['userKey']]) && $this->user) {
 			$logData['Log'][$this->settings[$Model->alias]['userKey']] = $this->user[$this->UserModel->alias][$this->UserModel->primaryKey];
 		}
@@ -175,7 +186,7 @@ class SysLogLogableBehavior extends LogableBehavior {
 					}
 					break;
 				case "Event":
-        			$title = 'Event ('. $Model->data[$Model->alias]['id'] .'): '. $Model->data[$Model->alias]['info'];
+					$title = 'Event ('. $Model->data[$Model->alias]['id'] .'): '. $Model->data[$Model->alias]['info'];
 					$logData['Log']['title'] = $title;
 					break;
 				case "Organisation":
@@ -238,26 +249,16 @@ class SysLogLogableBehavior extends LogableBehavior {
 		}
 		}
 		$this->Log->create($logData);
-		$this->Log->save(null, array(
-				'validate' => false));
-		
-		// write to syslogd as well
-		$syslog = new SysLog();
-		if (isset($logData['Log']['change'])) {
-			$syslog->write('notice', $logData['Log']['description'].' -- '.$logData['Log']['change']);
-		} else {
-			$syslog->write('notice', $logData['Log']['description']);
-		}
+		$this->Log->save(null, array('validate' => false));
 	}
-	
+
 	function setup(Model $Model, $config = array()) {
-	
 		if (!is_array($config)) {
 			$config = array();
 		}
 		$this->settings[$Model->alias] = array_merge($this->defaults, $config);
 		$this->settings[$Model->alias]['ignore'][] = $Model->primaryKey;
-	
+
 		$this->Log = ClassRegistry::init('Log');
 		if ($this->settings[$Model->alias]['userModel'] != $Model->alias) {
 			$this->UserModel = ClassRegistry::init($this->settings[$Model->alias]['userModel']);
@@ -265,7 +266,7 @@ class SysLogLogableBehavior extends LogableBehavior {
 			$this->UserModel = $Model;
 		}
 		$this->schema = $this->Log->schema();
-		App::import('Component', 'Auth');
+		App::uses('AuthComponent', 'Controller/Component');
 		$user = AuthComponent::user();
 		if (!empty($user)) $this->user[$this->settings[$Model->alias]['userModel']] = AuthComponent::user();
 		else $this->user['User'] = array('email' => 'SYSTEM', 'Organisation' => array('name' => 'SYSTEM'), 'id' => 0);

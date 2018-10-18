@@ -1,0 +1,13 @@
+{
+    "prefer-stable": true,
+    "minimum-stability": "dev",
+    "require": {
+        "kamisama/cake-resque": "@stable",
+        "pear/crypt_gpg": "@stable",
+        "pear/net_geoip": "@dev"
+    },
+    "suggest": {
+        "elasticsearch/elasticsearch": "For logging to elasticsearch",
+        "aws/aws-sdk-php": "To upload samples to S3"
+    }
+}
